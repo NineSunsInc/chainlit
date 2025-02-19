@@ -175,6 +175,20 @@ def set_oauth_state_cookie(response: Response, token: str):
         max_age=_state_cookie_lifetime,
     )
 
+# TODO: Add a cookie to store the code verifier
+_code_verifier_cookie_name = "code_verifier"
+def set_code_verifier_cookie(response: Response, code_verifier: str):
+    response.set_cookie(
+        _code_verifier_cookie_name,
+        code_verifier,
+        httponly=True,
+        samesite=_cookie_samesite,
+        secure=_cookie_secure,
+        max_age=_state_cookie_lifetime,
+    )
+def get_code_verifier_cookie(request: Request) -> Optional[str]:
+    return request.cookies.get(_code_verifier_cookie_name)
+
 
 def validate_oauth_state_cookie(request: Request, state: str):
     """Check the state from the oauth provider against the browser cookie."""
@@ -188,3 +202,6 @@ def validate_oauth_state_cookie(request: Request, state: str):
 def clear_oauth_state_cookie(response: Response):
     """Oauth complete, delete state token."""
     response.delete_cookie(_state_cookie_name)  # Do we set path here?
+
+    # TODO: Remove this cookie
+    response.delete_cookie(_code_verifier_cookie_name)

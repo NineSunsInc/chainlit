@@ -1,6 +1,7 @@
 import base64
 import os
 import urllib.parse
+from json import dumps
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -808,6 +809,85 @@ class GenericOAuthProvider(OAuthProvider):
             return (server_user, user)
 
 
+class MightyOAuthProvider(OAuthProvider):
+    id = "mighty"
+    env = ["MIGHTY_OAUTH_APPLICATION_ID", "MIGHTY_OAUTH_APPLICATION_PRIVATE_KEY", "MIGHTY_OAUTH_APPLICATION_API_KEY"]
+    authorize_url = "http://localhost:8080/mighty-oauth/authorize"
+    token_url = "http://localhost:8080/mighty-oauth/token"
+    user_info_url = "http://localhost:8080/api/v1/app/user-data"
+
+    def __init__(self) -> None:
+        self.client_id = os.environ.get("MIGHTY_OAUTH_APPLICATION_ID")
+        self.client_secret = os.environ.get("MIGHTY_OAUTH_APPLICATION_PRIVATE_KEY")
+        self.api_key = os.environ.get("MIGHTY_OAUTH_APPLICATION_API_KEY")
+        self.authorize_params = {
+            "response_type": "code",
+        }
+
+    async def get_token(self, code: str, url: str, code_verifier: str) -> str:
+        payload = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self.client_id,
+            "redirect_uri": url,
+            "code_verifier": code_verifier,
+        }
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                self.token_url,
+                data=dumps(payload),
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": self.api_key
+                },
+            )
+            print(response.text)
+            response.raise_for_status()
+            json = response.json()
+            token = json.get("access_token")
+            if not token:
+                raise httpx.HTTPStatusError(
+                    "Failed to get the access token",
+                    request=response.request,
+                    response=response,
+                )
+            return token
+    
+    async def get_user_info(self, token: str) -> Tuple[Dict[str, str] | User]:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                self.user_info_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "x-api-key": self.api_key,
+                },
+            )
+
+            # TODO: Return the empty user data instead of throwing error, we can handle it on the chat application instead
+            if (response.status_code == 400):
+                user = User(
+                    identifier="Mighty User",
+                    metadata={
+                        "provider": self.id,
+                    },
+                )
+                return (None, user)
+            
+            response.raise_for_status()
+            user_data = response.json()
+            user = User(
+                identifier="Mighty User",
+                metadata={
+                    "provider": self.id,
+                    "user_data": user_data
+                },
+            )
+
+
+
+            return (user_data, user)
+
+
 providers = [
     GithubOAuthProvider(),
     GoogleOAuthProvider(),
@@ -820,6 +900,7 @@ providers = [
     GitlabOAuthProvider(),
     KeycloakOAuthProvider(),
     GenericOAuthProvider(),
+    MightyOAuthProvider(),
 ]
 
 

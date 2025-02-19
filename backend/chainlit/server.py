@@ -39,6 +39,8 @@ from chainlit.auth.cookie import (
     set_auth_cookie,
     set_oauth_state_cookie,
     validate_oauth_state_cookie,
+    set_code_verifier_cookie,
+    get_code_verifier_cookie,
 )
 from chainlit.config import (
     APP_ROOT,
@@ -70,6 +72,10 @@ from chainlit.types import (
 from chainlit.user import PersistedUser, User
 
 from ._utils import is_path_inside
+
+# TODO: This is the additional implementation
+from hashlib import sha256
+from base64 import urlsafe_b64encode
 
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("text/css", ".css")
@@ -574,6 +580,19 @@ async def oauth_login(provider_id: str, request: Request):
             detail=f"Provider {provider_id} not found",
         )
 
+    # TODO: This is the additional implementation
+    additional_params = {}
+    if provider_id == "mighty":
+        print("MIGHTY")
+        # How can we give this for the MightyOAuthProvider?
+        code_verifier = random_secret(43)
+        b_code_challenge = sha256(code_verifier.encode('utf-8')).digest()
+        code_challenge = urlsafe_b64encode(b_code_challenge).decode("utf-8").replace("=", "")
+        additional_params = {
+            "code_challenge": code_challenge,
+            "code_challenge_method": "SHA256",
+        }
+
     random = random_secret(32)
 
     params = urllib.parse.urlencode(
@@ -582,13 +601,17 @@ async def oauth_login(provider_id: str, request: Request):
             "redirect_uri": f"{get_user_facing_url(request.url)}/callback",
             "state": random,
             **provider.authorize_params,
+            **additional_params,
         }
     )
+
+
     response = RedirectResponse(
         url=f"{provider.authorize_url}?{params}",
     )
 
     set_oauth_state_cookie(response, random)
+    set_code_verifier_cookie(response, code_verifier)
 
     return response
 
@@ -636,7 +659,15 @@ async def oauth_callback(
         )
 
     url = get_user_facing_url(request.url)
-    token = await provider.get_token(code, url)
+
+    # TODO: Add the code verifier to the token request
+    code_verifier = get_code_verifier_cookie(request)
+    if provider_id == "mighty":
+        token = await provider.get_token(code, url, code_verifier)
+    else:
+        token = await provider.get_token(code, url)
+
+    print("TOKEN", token)
 
     (raw_user_data, default_user) = await provider.get_user_info(token)
 
@@ -1298,3 +1329,4 @@ async def serve(request: Request):
 app.include_router(router)
 
 import chainlit.socket  # noqa
+
