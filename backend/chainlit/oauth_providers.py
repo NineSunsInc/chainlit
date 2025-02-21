@@ -812,9 +812,10 @@ class GenericOAuthProvider(OAuthProvider):
 class MightyOAuthProvider(OAuthProvider):
     id = "mighty"
     env = ["MIGHTY_OAUTH_APPLICATION_ID", "MIGHTY_OAUTH_APPLICATION_PRIVATE_KEY", "MIGHTY_OAUTH_APPLICATION_API_KEY"]
-    authorize_url = "http://localhost:8080/mighty-oauth/authorize"
-    token_url = "http://localhost:8080/mighty-oauth/token"
-    user_info_url = "http://localhost:8080/api/v1/app/user-data"
+
+    authorize_url = os.environ.get("MIGHTY_OAUTH_AUTHORIZE_URL", "http://localhost:8080/mighty-oauth/authorize")
+    token_url = os.environ.get("MIGHTY_OAUTH_TOKEN_URL", "http://localhost:8080/mighty-oauth/token")
+    user_info_url = os.environ.get("MIGHTY_OAUTH_USER_INFO_URL", "http://localhost:8080/api/v1/app/user-data")
 
     def __init__(self) -> None:
         self.client_id = os.environ.get("MIGHTY_OAUTH_APPLICATION_ID")
