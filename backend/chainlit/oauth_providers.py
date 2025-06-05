@@ -815,8 +815,8 @@ class MightyOAuthProvider(OAuthProvider):
 
     mighty_base_url = os.environ.get("MIGHTY_OAUTH_BASE_URL", "http://localhost:8080")
 
-    authorize_url = f"{mighty_base_url}/mighty-oauth/authorize"
-    token_url = f"{mighty_base_url}/mighty-oauth/token"
+    authorize_url = f"{mighty_base_url}/mighty-oauth/authorization"
+    token_url = f"{mighty_base_url}/mighty-oauth/biscuit-token"
     user_info_url = f"{mighty_base_url}/api/v1/app/user-data"
 
     def __init__(self) -> None:
@@ -834,6 +834,8 @@ class MightyOAuthProvider(OAuthProvider):
             "client_id": self.client_id,
             "redirect_uri": url,
             "code_verifier": code_verifier,
+            "expiration": 300, # 5 minutes
+            "usage_once": True # Only use the token once
         }
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -847,7 +849,7 @@ class MightyOAuthProvider(OAuthProvider):
             print(response.text)
             response.raise_for_status()
             json = response.json()
-            token = json.get("access_token")
+            token = json.get("biscuit_token")
             if not token:
                 raise httpx.HTTPStatusError(
                     "Failed to get the access token",
@@ -858,26 +860,9 @@ class MightyOAuthProvider(OAuthProvider):
     
     async def get_user_info(self, token: str) -> Tuple[Dict[str, str] | User]:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                self.user_info_url,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "x-api-key": self.api_key,
-                },
-            )
-
-            # TODO: Return the empty user data instead of throwing error, we can handle it on the chat application instead
-            if (response.status_code == 400):
-                user = User(
-                    identifier="Mighty User",
-                    metadata={
-                        "provider": self.id,
-                    },
-                )
-                return (None, user)
-            
-            response.raise_for_status()
-            user_data = response.json()
+            user_data = {
+                "biscuit_token": token,
+            }
             user = User(
                 identifier="Mighty User",
                 metadata={
@@ -885,8 +870,6 @@ class MightyOAuthProvider(OAuthProvider):
                     "user_data": user_data
                 },
             )
-
-
 
             return (user_data, user)
 
